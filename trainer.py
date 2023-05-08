@@ -13,7 +13,7 @@ class Trainer:
     model: torch.nn.Module
 
     def __init__(self, model_name, pos_sampler, neg_sampler, loss, device):
-        self.model_name = model_name
+        self.model_name = model_name    # 模型名称，用于指定模型
         self.sampler = dgl.dataloading.as_edge_prediction_sampler(pos_sampler, negative_sampler=neg_sampler)
         self.loss = loss
         self.device = device
