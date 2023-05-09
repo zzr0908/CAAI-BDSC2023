@@ -5,6 +5,8 @@ from trainer import *
 from models import *
 from samplers import *
 from utils import *
+import torch
+torch.cuda.manual_seed_all(2023)
 
 warnings.filterwarnings('ignore')
 pd.set_option('display.max_columns',None)
@@ -17,6 +19,12 @@ if __name__ == '__main__':
     sub_graphs = pd.read_csv("data/subgroup.csv")   # 子群体
     user = pd.read_json("data/user_info.json")      # 用户信息
     #
+    # demo_users = target_event["inviter_id"].unique().tolist() + target_event["voter_id"].unique().tolist()
+    # demo_users = demo_users + source_event["inviter_id"].unique().tolist() + source_event["voter_id"].unique().tolist()
+    # demo_users = list(set(demo_users))
+    # demo_target = target_event
+    # demo_source = source_event
+
     demo_users: list = sub_graphs[sub_graphs["root"] == "d09ad25df105efc54ea571eaf498a521"].user.tolist()
     demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
     demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
@@ -37,26 +45,11 @@ if __name__ == '__main__':
     demo_target["event_id"] = demo_target["event_id"].apply(lambda x: target2id[x])
     demo_source["event_id"] = demo_source["event_id"].apply(lambda x: source2id[x])
 
-    graph_dataset = GraphDataset(demo_source, demo_target, demo_user_info)
-    graph_dataset.process()
-    print(graph_dataset[0])
-    print(demo_source.shape, demo_target.shape)
+    trainer = Trainer("Sage", "Sage", device='cuda:0')
+    trainer.data_prepare(demo_source, demo_target, demo_user_info)
 
+    pretrain_config = {"input": 3, "embedding": 32, "output": 8, "n_class": len(source2id)*2, "batch_size": 1024, "epoch":5}
+    trainer.pretrain(pretrain_config)
 
-
-
-
-
-
-    # pos_sampler = dgl.dataloading.NeighborSampler([4, 4])
-    # negative_sampler = dgl.dataloading.negative_sampler.Uniform(5)
-    #
-    # trainer = Trainer(model_name="Sage", pos_sampler=pos_sampler, neg_sampler=negative_sampler,
-    #                   loss=entropy_loss, device='cuda:0')
-    # trainer.data_prepare(demo_event, demo_user_info)
-    #
-    # model_config = {"input": 3, "embedding": 64, "output": 32}
-    # trainer.model_init(model_config)
-    #
-    # train_config = {"batch_size": 16, "opt": "Adam", "iter": 50}
-    # trainer.train(train_config)
+    print(trainer.graph)
+    print(trainer.graph.ndata)

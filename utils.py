@@ -18,3 +18,12 @@ def to_one_hot(x, mx):
     for idx in x:
         oh[idx] = 1
     return oh
+
+
+def show_graph_info(g):
+    """
+    对图简单描述
+    """
+    print("graph info:")
+    print(f"number of nodes: {g.num_nodes()}")
+    print(f"number of edges: {g.num_edges()}")

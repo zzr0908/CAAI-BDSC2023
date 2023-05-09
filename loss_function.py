@@ -13,3 +13,11 @@ def entropy_loss(pos_score, neg_score):
     loss = F.binary_cross_entropy_with_logits(score, label)
     return loss
 
+
+def multi_label_loss(score, target):
+    """
+    用于边分类预训练任务的损失函数
+    input, target: (batch size, class num)
+    """
+    loss = F.binary_cross_entropy_with_logits(score, target)
+    return loss

@@ -8,11 +8,30 @@ class DotPredictor(nn.Module):
     def forward(self, g, h):
         with g.local_scope():
             g.ndata["h"] = h
-            # Compute a new edge feature named 'score' by a dot-product between the
-            # source node feature 'h' and destination node feature 'h'.
             g.apply_edges(fn.u_dot_v("h", "h", "score"))
-            # u_dot_v returns a 1-element vector for each edge so you need to squeeze it.
             return g.edata["score"][:, 0]
+
+
+class EdgeClassifyHead(nn.Module):
+    """
+    边的多分类任务中的分类头
+    :param:
+        emd: 模型输出层embedding长度
+        c: 类别数量
+    """
+    def __init__(self, emd, out):
+        super(EdgeClassifyHead, self).__init__()
+        # A linear submodule for projecting the input and neighbor feature to the output.
+        self.out = out
+        self.src_linear = nn.Linear(emd, out)
+        self.dst_linear = nn.Linear(emd, out)
+
+    def forward(self, g, h):
+        with g.local_scope():
+            g.ndata["src_emd"] = self.src_linear(h)
+            g.ndata["dst_emd"] = self.dst_linear(h)
+            g.apply_edges(fn.u_add_v("src_emd", "dst_emd", "score"))
+            return g.edata["score"][:, :self.out]
 
 
 class SAGEConv(nn.Module):

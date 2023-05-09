@@ -83,11 +83,11 @@ class GraphDataset(DGLDataset):
             target_val_mask: 来自target训练集
             target_event 目标事件的id
         """
-        self.graph.edata['source_mask'] = torch.tensor(np.array(events["source_mask"]), dtype=torch.int32)
-        self.graph.edata['source_events'] = torch.tensor(np.array(events["source_events"].tolist()), dtype=torch.int32)
-        self.graph.edata['target_train_mask'] = torch.tensor(np.array(events["target_train_mask"]), dtype=torch.int32)
-        self.graph.edata['target_val_mask'] = torch.tensor(np.array(events["target_val_mask"]), dtype=torch.int32)
-        self.graph.edata['target_event'] = torch.tensor(np.array(events["target_event"]), dtype=torch.int32)
+        self.graph.edata['source_mask'] = torch.tensor(np.array(events["source_mask"]), dtype=torch.bool)
+        self.graph.edata['source_events'] = torch.tensor(np.array(events["source_events"].tolist()), dtype=torch.float32)
+        self.graph.edata['target_train_mask'] = torch.tensor(np.array(events["target_train_mask"]), dtype=torch.bool)
+        self.graph.edata['target_val_mask'] = torch.tensor(np.array(events["target_val_mask"]), dtype=torch.bool)
+        self.graph.edata['target_event'] = torch.tensor(np.array(events["target_event"]), dtype=torch.float32)
 
     def __getitem__(self, idx):
         assert idx == 0
