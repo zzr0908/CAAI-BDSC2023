@@ -48,8 +48,12 @@ if __name__ == '__main__':
     trainer = Trainer("Sage", "Sage", device='cuda:0')
     trainer.data_prepare(demo_source, demo_target, demo_user_info)
 
-    pretrain_config = {"input": 3, "embedding": 32, "output": 8, "n_class": len(source2id)*2, "batch_size": 1024, "epoch":5}
+    pretrain_config = {"input": 3, "embedding": 32, "output": 32,
+                       "n_class": len(source2id)*2, "batch_size": 1024, "epoch": 5}
     trainer.pretrain(pretrain_config)
 
-    print(trainer.graph)
-    print(trainer.graph.ndata)
+    finetune_config = {"node_feat": 32, "epoch": 5}
+    trainer.finetune(finetune_config)
+    #
+    # print(trainer.graph)
+    # print(trainer.graph.ndata)

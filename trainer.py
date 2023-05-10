@@ -51,6 +51,7 @@ class Trainer:
         opt = pretrain_config.get("opt", "Adam")
         sample_neighbor = pretrain_config.get("opt", [6, 10])
 
+
         # model init
         if self.pretrain_model == "Sage":
             inp, emb, out = pretrain_config["input"], pretrain_config["embedding"], pretrain_config["output"]
@@ -116,9 +117,100 @@ class Trainer:
                     node_embeddings[input_nodes] = outputs
         self.graph.ndata["embedding"] = node_embeddings
 
-
-
     def finetune(self, finetune_config):
+
+        neg_cnt = finetune_config.get("neg_cnt", 1)
+        hidden = finetune_config.get("hidden", 64)
+        target_event_cnt = finetune_config.get("target_event_cnt", 4)   # 得弄成内部传递
+        node_embedding = finetune_config.get("node_feat", 128)
+        batch_size = finetune_config.get("batch_size", 64)
+        epoch = finetune_config.get("epoch", 20)
+        opt = finetune_config.get("opt", "Adam")
+        loss_func = finetune_config.get("loss", multi_label_loss)
+
+        eid = torch.arange(self.graph.num_edges()).to(self.device)
+        train_eid = eid[self.graph.edata["target_train_mask"]]  # 训练集
+        val_eid = eid[self.graph.edata["target_val_mask"]]      # 验证集
+
+        # init model
+        finetune_model = FcLinkPredictor(node_embedding, hidden, target_event_cnt).to(self.device)
+
+        # dataloader with negative sampler
+        neg_sampler = dgl.dataloading.negative_sampler.Uniform(neg_cnt)
+        sampler = dgl.dataloading.NeighborSampler([0])
+        sampler = dgl.dataloading.as_edge_prediction_sampler(
+            sampler, negative_sampler=neg_sampler
+        )
+        finetune_loader = dgl.dataloading.DataLoader(
+            self.graph,
+            train_eid,
+            sampler,
+            device=self.device,
+            batch_size=batch_size,
+            shuffle=True,
+            drop_last=False,
+        )
+        val_loader = dgl.dataloading.DataLoader(
+            self.graph,
+            val_eid,
+            sampler,
+            device=self.device,
+            batch_size=val_eid.shape[0],
+            shuffle=True,
+            drop_last=False,
+        )
+
+        # training loop
+        for i in range(epoch):
+            epoch_loss = 0
+            for step, (input_nodes, pos_graph, neg_graph, mfgs) in enumerate(finetune_loader):
+                pos_u, pos_v = self.get_subgraph_vec(pos_graph, mfgs, "embedding")
+                neg_u, neg_v = self.get_subgraph_vec(neg_graph, mfgs, "embedding")
+                pos_pred = finetune_model(pos_u, pos_v)
+                neg_pred = finetune_model(neg_u, neg_v)
+                pred = torch.cat((pos_pred, neg_pred), 0)  # (2*batch, 1)
+                pos_label = pos_graph.edata['target_event']
+                neg_label = torch.zeros((neg_graph.num_edges(), pos_label.shape[1])).to(self.device)
+                label = torch.cat((pos_label, neg_label), 0)
+                loss = loss_func(pred, label)
+                with torch.no_grad():
+                    epoch_loss += loss
+                if opt == "Adam":
+                    opt = torch.optim.Adam(finetune_model.parameters())
+                else:
+                    pass
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+            train_loss = epoch_loss / (step + 1)
+            for step, (input_nodes, pos_graph, neg_graph, mfgs) in enumerate(val_loader):
+                with torch.no_grad():
+                    pos_u, pos_v = self.get_subgraph_vec(pos_graph, mfgs, "embedding")
+                    neg_u, neg_v = self.get_subgraph_vec(neg_graph, mfgs, "embedding")
+                    pos_pred = finetune_model(pos_u, pos_v)
+                    neg_pred = finetune_model(neg_u, neg_v)
+                    pred = torch.cat((pos_pred, neg_pred), 0)  # (2*batch, 1)
+                    pos_label = pos_graph.edata['target_event']
+                    neg_label = torch.zeros((neg_graph.num_edges(), pos_label.shape[1])).to(self.device)
+                    label = torch.cat((pos_label, neg_label), 0)
+                    val_loss = loss_func(pred, label)
+            print(f"batch{i}/{epoch}  --------------train loss:{train_loss}, val loss:{val_loss}")
+
+        self.model = finetune_model
+
+    def infer(self, user_idx, event_id):
         pass
+
+    def get_subgraph_vec(self, subgraph, mfgs, feat):
+        u, v = subgraph.edges()
+        feat = mfgs[0].srcdata[feat]
+        u, v = feat[u], feat[v]
+        return u, v
+
+
+
+
+
+
 
 

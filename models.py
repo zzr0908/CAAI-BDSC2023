@@ -84,3 +84,24 @@ class SageModel(nn.Module):
         h_dst = h[: mfgs[1].num_dst_nodes()]
         h = self.conv2(mfgs[1], (h, h_dst))
         return h
+
+
+class FcLinkPredictor(nn.Module):
+    """
+    用fc层映射起点与终点向量到a，将边类型通过embedding层映射到b,然后计算向量内积dot(a, b)
+    input = (h_src, h_dst, edge_type)
+    output = score
+    """
+    def __init__(self, node_feat, hidden_feat, edge_type):
+        super(FcLinkPredictor, self).__init__()
+        self.node_linear = nn.Linear(2*node_feat, hidden_feat)
+        self.out_linear = nn.Linear(hidden_feat, edge_type)
+
+    def forward(self, u_feat, v_feat):    # edge_type 是shape=1 的tensor, 与模型在相同device
+        node_feat = self.node_linear(torch.cat((u_feat, v_feat), 1))
+        node_feat = F.relu(node_feat)
+        score = self.out_linear(node_feat)
+        return score
+
+
+
