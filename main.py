@@ -22,7 +22,7 @@ if __name__ == '__main__':
     negative_sampler = dgl.dataloading.negative_sampler.Uniform(5)
 
     trainer = Trainer(model_name="Sage", pos_sampler=pos_sampler, neg_sampler=negative_sampler,
-                      loss=entropy_loss, device='cuda:0')
+                      loss=auc_surrogate_loss, device='cpu')
     trainer.data_prepare(demo_event, demo_user_info)
 
     model_config = {"input": 3, "embedding": 64, "output": 32}
