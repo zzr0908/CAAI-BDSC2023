@@ -54,6 +54,6 @@ if __name__ == '__main__':
 
     finetune_config = {"node_feat": 32, "epoch": 5}
     trainer.finetune(finetune_config)
-    #
-    # print(trainer.graph)
-    # print(trainer.graph.ndata)
+
+    prediction = trainer.infer(100, 2)
+    print(prediction)

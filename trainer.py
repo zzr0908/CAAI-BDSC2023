@@ -49,7 +49,7 @@ class Trainer:
         epoch = pretrain_config.get("epoch", 10)
         batch_size = pretrain_config.get("batch_size", 8)
         opt = pretrain_config.get("opt", "Adam")
-        sample_neighbor = pretrain_config.get("opt", [6, 10])
+        sample_neighbor = pretrain_config.get("sample_neighbor", [6, 10])
 
 
         # model init
@@ -198,8 +198,30 @@ class Trainer:
 
         self.model = finetune_model
 
-    def infer(self, user_idx, event_id):
-        pass
+    def infer(self, user_idx, event_id, batch_size=200, topK=5):
+        # 计算user_idx与所有user得score, 输出最小的
+        user_num = self.graph.num_nodes()   # 得建立传参机制
+        scores = torch.zeros((user_num, )).to(self.device)
+        for i in range(self.graph.num_nodes()//batch_size + 1):
+            with torch.no_grad():
+                batch_idx = torch.arange(i*batch_size, min((i+1)*batch_size, user_num)).to(self.device)
+                v = self.graph.ndata["embedding"][batch_idx]
+                u = self.graph.ndata["embedding"][user_idx].repeat((v.shape[0], 1))
+                output = self.model(u, v)
+                scores[batch_idx] = output[:, event_id]
+        scores = scores.to("cpu").numpy()
+        white_list = [user_idx]
+        predictions = []
+        pred_idx = np.argsort(scores)[::-1]
+
+        i = 0
+        while len(predictions) < topK:
+            if pred_idx[i] not in white_list:
+                predictions.append(pred_idx[i])
+            i += 1
+
+        return predictions
+
 
     def get_subgraph_vec(self, subgraph, mfgs, feat):
         u, v = subgraph.edges()

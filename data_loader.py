@@ -26,7 +26,7 @@ class GraphDataset(DGLDataset):
             target_val_mask: 来自target训练集
             target_event 目标事件的id
     """
-    def __init__(self,  source_event, target_event, user_info, val_frac=0.2, rs=2023):
+    def __init__(self,  source_event, target_event, user_info, val_frac=0.247, rs=2023):
         self.source_event = source_event[["inviter_id", "event_id", "voter_id"]]
         self.target_event = target_event[["inviter_id", "event_id", "voter_id"]]
         self.user_info = user_info
