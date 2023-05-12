@@ -27,3 +27,27 @@ def show_graph_info(g):
     print("graph info:")
     print(f"number of nodes: {g.num_nodes()}")
     print(f"number of edges: {g.num_edges()}")
+
+
+def mean_reciprocal_rank(eva_prediction):
+    """
+    :param eva_prediction: inviter_id,event_id,voter_id,candidate_voter_list
+    :return:
+    """
+    mrr = []
+    rank_score = [1, 1 / 2, 1 / 3, 1 / 4, 1 / 5]
+    candidate_voter_list = eva_prediction['candidate_voter_list'].tolist()
+    true_voter_list = eva_prediction['voter_list'].tolist()
+    for i in range(eva_prediction.shape[0]):
+        candidate_voter, true_voter = candidate_voter_list[i], true_voter_list[i]
+        is_right = [1 if k in true_voter else 0 for k in candidate_voter]
+        mrr.append(np.multiply(is_right, rank_score).mean())
+    return np.mean(mrr)
+
+
+
+
+
+
+
+

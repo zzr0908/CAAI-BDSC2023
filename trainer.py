@@ -5,14 +5,17 @@ from utils import *
 from loss_function import *
 import torch
 import torch.nn as nn
+from torch.utils.tensorboard import SummaryWriter
 import dgl
 import random
-from  tqdm import tqdm
+from tqdm import tqdm
+
 
 
 class Trainer:
     model: torch.nn.Module
     graph: dgl.DGLGraph
+    evaluation_data: pd.DataFrame
     """
     训练阶段分为data prepare, pretrain, finetune三步
     data prepare阶段将数据完成数据预处理与构图工作
@@ -38,14 +41,16 @@ class Trainer:
         print("======Graph data preparing=======")
         data = GraphDataset(source, target, users)
         data.process()
-        self.graph = data[0].to(self.device) # 图先放在cpu, 训练阶段将子图放gpu
+        self.graph = data[0].to(self.device)    # 图先放在cpu, 训练阶段将子图放gpu
+        self.evaluation_data = data.get_evaluation_data()
         print("======prepare finished=======")
         print(f"当前显存占用{torch.cuda.memory_allocated()}")
         show_graph_info(self.graph)
 
     def pretrain(self, pretrain_config):
         # params
-        loss_func = pretrain_config.get("loss", multi_label_loss)
+        # loss_func = pretrain_config.get("loss", multi_label_loss)
+        loss_func = pretrain_config.get("loss", auc_surrogate_loss)
         epoch = pretrain_config.get("epoch", 10)
         batch_size = pretrain_config.get("batch_size", 8)
         opt = pretrain_config.get("opt", "Adam")
@@ -74,7 +79,8 @@ class Trainer:
                 )
 
         # training loop
-        print("\n\n start pretraining")
+        print("\n start pretraining")
+        # writer = SummaryWriter("D:/zhan/CAAI-BDSC2023/logs")
         for i in range(epoch):
             epoch_loss = 0
             for step, (input_nodes, subgraph, mfgs) in enumerate(train_loader):
@@ -87,13 +93,14 @@ class Trainer:
                     epoch_loss += loss
 
                 if opt == "Adam":
-                    opt = torch.optim.Adam(list(pretrain_model.parameters()) + list(head.parameters()))
+                    opt = torch.optim.Adam(list(pretrain_model.parameters()) + list(head.parameters()), weight_decay=0.05)
                 else:
                     pass
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
             print(f"batch{i}/{epoch}  --------------mean loss:{epoch_loss/(step+1)}")
+            # writer.add_scalar('pretraining loss/batch', loss, i)
 
         # 获取节点的embedding
         node_sampler = dgl.dataloading.NeighborSampler(sample_neighbor)
@@ -114,19 +121,20 @@ class Trainer:
                 with torch.no_grad():
                     inputs = mfgs[0].srcdata["user_info"]
                     outputs = pretrain_model(mfgs, inputs)
-                    node_embeddings[input_nodes] = outputs
+                    node_embeddings[output_nodes] = outputs
         self.graph.ndata["embedding"] = node_embeddings
 
     def finetune(self, finetune_config):
 
         neg_cnt = finetune_config.get("neg_cnt", 1)
         hidden = finetune_config.get("hidden", 64)
-        target_event_cnt = finetune_config.get("target_event_cnt", 4)   # 得弄成内部传递
+        target_event_cnt = finetune_config.get("target_event_cnt", 8)   # 得弄成内部传递
         node_embedding = finetune_config.get("node_feat", 128)
         batch_size = finetune_config.get("batch_size", 64)
         epoch = finetune_config.get("epoch", 20)
         opt = finetune_config.get("opt", "Adam")
-        loss_func = finetune_config.get("loss", multi_label_loss)
+        # loss_func = finetune_config.get("loss", multi_label_loss)
+        loss_func = finetune_config.get("loss", auc_surrogate_loss)
 
         eid = torch.arange(self.graph.num_edges()).to(self.device)
         train_eid = eid[self.graph.edata["target_train_mask"]]  # 训练集
@@ -161,6 +169,8 @@ class Trainer:
         )
 
         # training loop
+        print("\n start finetune training")
+        # writer = SummaryWriter("D:/zhan/CAAI-BDSC2023/logs")
         for i in range(epoch):
             epoch_loss = 0
             for step, (input_nodes, pos_graph, neg_graph, mfgs) in enumerate(finetune_loader):
@@ -176,7 +186,7 @@ class Trainer:
                 with torch.no_grad():
                     epoch_loss += loss
                 if opt == "Adam":
-                    opt = torch.optim.Adam(finetune_model.parameters())
+                    opt = torch.optim.Adam(finetune_model.parameters(), weight_decay=0.05)
                 else:
                     pass
                 opt.zero_grad()
@@ -195,32 +205,44 @@ class Trainer:
                     label = torch.cat((pos_label, neg_label), 0)
                     val_loss = loss_func(pred, label)
             print(f"batch{i}/{epoch}  --------------train loss:{train_loss}, val loss:{val_loss}")
+            # writer.add_scalar('finetune train_loss/batch', train_loss, i)
+            # writer.add_scalar('finetune val_loss/batch', val_loss, i)
 
         self.model = finetune_model
 
-    def infer(self, user_idx, event_id, batch_size=200, topK=5):
-        # 计算user_idx与所有user得score, 输出最小的
-        user_num = self.graph.num_nodes()   # 得建立传参机制
-        scores = torch.zeros((user_num, )).to(self.device)
-        for i in range(self.graph.num_nodes()//batch_size + 1):
-            with torch.no_grad():
-                batch_idx = torch.arange(i*batch_size, min((i+1)*batch_size, user_num)).to(self.device)
-                v = self.graph.ndata["embedding"][batch_idx]
-                u = self.graph.ndata["embedding"][user_idx].repeat((v.shape[0], 1))
-                output = self.model(u, v)
-                scores[batch_idx] = output[:, event_id]
-        scores = scores.to("cpu").numpy()
-        white_list = [user_idx]
-        predictions = []
-        pred_idx = np.argsort(scores)[::-1]
 
-        i = 0
-        while len(predictions) < topK:
-            if pred_idx[i] not in white_list:
-                predictions.append(pred_idx[i])
-            i += 1
 
-        return predictions
+    def infer(self, test_event, batch_size=200, topK=5):
+        # 对每个user_idx，计算与所有user的score, 输出最大的
+        user_num = self.graph.num_nodes()   # 图节点个数
+        candidate_voter_list = []
+        inviter_id_list = test_event['inviter_id'].tolist()
+        event_id_list = test_event['event_id'].tolist()
+        for i in range(test_event.shape[0]):
+            user_idx = inviter_id_list[i]
+            event_id = event_id_list[i]
+            scores = torch.zeros((user_num, )).to(self.device)
+            for j in range(self.graph.num_nodes()//batch_size + 1):
+                with torch.no_grad():
+                    batch_idx = torch.arange(j*batch_size, min((j+1)*batch_size, user_num)).to(self.device)
+                    v = self.graph.ndata["embedding"][batch_idx]
+                    u = self.graph.ndata["embedding"][user_idx].repeat((v.shape[0], 1))
+                    output = self.model(u, v)
+                    scores[batch_idx] = output[:, event_id]
+            scores = scores.to("cpu").numpy()
+            white_list = [user_idx]
+            predictions = []
+            pred_idx = np.argsort(scores)[::-1]
+
+            k = 0
+            while len(predictions) < topK:
+                if pred_idx[k] not in white_list:
+                    predictions.append(pred_idx[k])
+                k += 1
+            candidate_voter_list.append(predictions)
+        test_event['candidate_voter_list'] = candidate_voter_list
+
+        return test_event
 
 
     def get_subgraph_vec(self, subgraph, mfgs, feat):
