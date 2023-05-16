@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import dgl.function as fn
+from torchvision.ops import sigmoid_focal_loss
 
 
 def entropy_loss(pos_score, neg_score):
@@ -19,7 +20,7 @@ def multi_label_loss(score, target):
     用于边分类预训练任务的损失函数
     input, target: (batch size, class num)
     """
-    loss = F.binary_cross_entropy_with_logits(score, target)
+    loss = sigmoid_focal_loss(score, target, alpha=0.99, reduction="mean")
     return loss
 
 

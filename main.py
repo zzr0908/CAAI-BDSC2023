@@ -18,7 +18,15 @@ if __name__ == '__main__':
     source_event = pd.read_json("data/source_event_preliminary_train_info.json")    # source域三元组
     sub_graphs = pd.read_csv("data/subgroup.csv")   # 子群体
     user = pd.read_json("data/user_info.json")      # 用户信息
-    #
+    root_event = pd.read_csv("data/root_event.csv")
+
+    user["gender_id"] = user["gender_id"] + 1     # 处理特征，特征中存在-1(未知，转换为0以上得整数类别）
+    user["age_level"] = user["age_level"] + 1
+    user["user_level"] = user["user_level"] + 1
+
+    events, roots = root_event.event_id.tolist(), root_event.root_event.tolist()
+    event_root_dic = {events[i]: roots[i] for i in range(len(events))}
+
     demo_users = target_event["inviter_id"].unique().tolist() + target_event["voter_id"].unique().tolist()
     demo_users = demo_users + source_event["inviter_id"].unique().tolist() + source_event["voter_id"].unique().tolist()
     demo_users = list(set(demo_users))
@@ -28,7 +36,11 @@ if __name__ == '__main__':
     # demo_users: list = sub_graphs[sub_graphs["root"] == "d09ad25df105efc54ea571eaf498a521"].user.tolist()
     # demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
     # demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
+
     demo_user_info: pd.DataFrame = user[user["user_id"].isin(demo_users)].reset_index(drop=True)
+
+    demo_source["event_id"] = demo_source["event_id"].apply(lambda x: event_root_dic[x])
+    demo_source = demo_source.drop_duplicates()
 
     user2id = {demo_users[i]: i for i in range(len(demo_users))}
     demo_target["inviter_id"] = demo_target["inviter_id"].apply(lambda x: user2id[x])
@@ -45,19 +57,22 @@ if __name__ == '__main__':
     demo_target["event_id"] = demo_target["event_id"].apply(lambda x: target2id[x])
     demo_source["event_id"] = demo_source["event_id"].apply(lambda x: source2id[x])
 
-    trainer = Trainer("Sage", "Sage", device='cpu')
-    trainer.data_prepare(demo_source, demo_target, demo_user_info)
+    trainer = Trainer("Sage", "Sage", device='cuda:0')
+    trainer.data_prepare(demo_source, demo_target, demo_user_info, {"source_val_frac": 0.05})
 
-    pretrain_config = {"input": 3, "embedding": 128, "output": 64,
-                       "n_class": len(source2id)*2, "batch_size": 1024, "epoch": 1, "loss": multi_label_loss}
+    print(trainer.meta_data)
+
+    pretrain_config = {"input": 3, "embedding": 128, "output": 128,
+                       "n_class": len(source2id)*2, "batch_size": 1024, "epoch": 20,
+                       "loss": multi_label_loss, "sample_neighbor": [4, 4]}
     trainer.pretrain(pretrain_config)
-
-    finetune_config = {"node_feat": 64, "epoch": 50, "loss": multi_label_loss}
-    trainer.finetune(finetune_config)
-
-    evaluation_prediction = trainer.infer(trainer.evaluation_data)
-    mrr = mean_reciprocal_rank(evaluation_prediction)
-    print("MRR:", mrr)
+    #
+    # finetune_config = {"node_feat": 64, "epoch": 50, "loss": multi_label_loss}
+    # trainer.finetune(finetune_config)
+    #
+    # evaluation_prediction = trainer.infer(trainer.evaluation_data)
+    # mrr = mean_reciprocal_rank(evaluation_prediction)
+    # print("MRR:", mrr)
 
 
 

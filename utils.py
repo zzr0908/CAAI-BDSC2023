@@ -12,9 +12,9 @@ def train_val_split(target_event: pd.DataFrame, seed=2023, frac=0.5):
     return train, val
 
 
-def to_one_hot(x, mx):
-    # example: to_one_hot([0,2], 3) = [1, 0, 1, 0]
-    oh = [0] * (mx + 1)
+def to_one_hot(x, size):
+    # example: to_one_hot([0,2], 4) = [1, 0, 1, 0]
+    oh = [0] * size
     for idx in x:
         oh[idx] = 1
     return oh
@@ -30,10 +30,7 @@ def show_graph_info(g):
 
 
 def mean_reciprocal_rank(eva_prediction):
-    """
-    :param eva_prediction: inviter_id,event_id,voter_id,candidate_voter_list
-    :return:
-    """
+
     mrr = []
     rank_score = [1, 1 / 2, 1 / 3, 1 / 4, 1 / 5]
     candidate_voter_list = eva_prediction['candidate_voter_list'].tolist()
