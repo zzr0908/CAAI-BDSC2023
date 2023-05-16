@@ -96,14 +96,15 @@ class Trainer:
                     opt = torch.optim.Adam(list(pretrain_model.parameters()) + list(head.parameters()), weight_decay=0.05)
                 else:
                     pass
-                opt.zero_grad()
-                loss.backward()
-                opt.step()
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
             print(f"batch{i}/{epoch}  --------------mean loss:{epoch_loss/(step+1)}")
             # writer.add_scalar('pretraining loss/batch', loss, i)
 
         # 获取节点的embedding
-        node_sampler = dgl.dataloading.NeighborSampler(sample_neighbor)
+        # node_sampler = dgl.dataloading.NeighborSampler(sample_neighbor)
+        node_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(2)
         node_loader = dgl.dataloading.DataLoader(
                         self.graph,
                         torch.arange(self.graph.num_nodes()).to(self.device),
@@ -128,7 +129,7 @@ class Trainer:
 
         neg_cnt = finetune_config.get("neg_cnt", 1)
         hidden = finetune_config.get("hidden", 64)
-        target_event_cnt = finetune_config.get("target_event_cnt", 8)   # 得弄成内部传递
+        target_event_cnt = finetune_config.get("target_event_cnt", 4)   # 得弄成内部传递
         node_embedding = finetune_config.get("node_feat", 128)
         batch_size = finetune_config.get("batch_size", 64)
         epoch = finetune_config.get("epoch", 20)
@@ -145,7 +146,8 @@ class Trainer:
 
         # dataloader with negative sampler
         neg_sampler = dgl.dataloading.negative_sampler.Uniform(neg_cnt)
-        sampler = dgl.dataloading.NeighborSampler([0])
+        # sampler = dgl.dataloading.NeighborSampler([4, 4])
+        sampler = dgl.dataloading.MultiLayerFullNeighborSampler(2)
         sampler = dgl.dataloading.as_edge_prediction_sampler(
             sampler, negative_sampler=neg_sampler
         )
@@ -170,7 +172,6 @@ class Trainer:
 
         # training loop
         print("\n start finetune training")
-        # writer = SummaryWriter("D:/zhan/CAAI-BDSC2023/logs")
         for i in range(epoch):
             epoch_loss = 0
             for step, (input_nodes, pos_graph, neg_graph, mfgs) in enumerate(finetune_loader):
@@ -193,6 +194,7 @@ class Trainer:
                 loss.backward()
                 opt.step()
             train_loss = epoch_loss / (step + 1)
+            val_loss = 0
             for step, (input_nodes, pos_graph, neg_graph, mfgs) in enumerate(val_loader):
                 with torch.no_grad():
                     pos_u, pos_v = self.get_subgraph_vec(pos_graph, mfgs, "embedding")
@@ -203,24 +205,21 @@ class Trainer:
                     pos_label = pos_graph.edata['target_event']
                     neg_label = torch.zeros((neg_graph.num_edges(), pos_label.shape[1])).to(self.device)
                     label = torch.cat((pos_label, neg_label), 0)
-                    val_loss = loss_func(pred, label)
+                    val_loss += loss_func(pred, label)
+            val_loss = val_loss / (step + 1)
             print(f"batch{i}/{epoch}  --------------train loss:{train_loss}, val loss:{val_loss}")
-            # writer.add_scalar('finetune train_loss/batch', train_loss, i)
-            # writer.add_scalar('finetune val_loss/batch', val_loss, i)
 
         self.model = finetune_model
 
 
 
     def infer(self, test_event, batch_size=200, topK=5):
-        # 对每个user_idx，计算与所有user的score, 输出最大的
+        # 对每个user_idx，计算与所有user的score, 输出最大的5个
         user_num = self.graph.num_nodes()   # 图节点个数
         candidate_voter_list = []
-        inviter_id_list = test_event['inviter_id'].tolist()
-        event_id_list = test_event['event_id'].tolist()
+        inviter_id_list, event_id_list = test_event['inviter_id'].tolist(), test_event['event_id'].tolist()
         for i in range(test_event.shape[0]):
-            user_idx = inviter_id_list[i]
-            event_id = event_id_list[i]
+            user_idx, event_id = inviter_id_list[i], event_id_list[i]
             scores = torch.zeros((user_num, )).to(self.device)
             for j in range(self.graph.num_nodes()//batch_size + 1):
                 with torch.no_grad():

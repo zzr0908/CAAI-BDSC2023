@@ -9,8 +9,8 @@ import torch
 torch.cuda.manual_seed_all(2023)
 
 warnings.filterwarnings('ignore')
-pd.set_option('display.max_columns',None)
-pd.set_option('display.max_rows',100)
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
 
 
 if __name__ == '__main__':
@@ -19,15 +19,15 @@ if __name__ == '__main__':
     sub_graphs = pd.read_csv("data/subgroup.csv")   # 子群体
     user = pd.read_json("data/user_info.json")      # 用户信息
     #
-    demo_users = target_event["inviter_id"].unique().tolist() + target_event["voter_id"].unique().tolist()
-    demo_users = demo_users + source_event["inviter_id"].unique().tolist() + source_event["voter_id"].unique().tolist()
-    demo_users = list(set(demo_users))
-    demo_target = target_event
-    demo_source = source_event
+    # demo_users = target_event["inviter_id"].unique().tolist() + target_event["voter_id"].unique().tolist()
+    # demo_users = demo_users + source_event["inviter_id"].unique().tolist() + source_event["voter_id"].unique().tolist()
+    # demo_users = list(set(demo_users))
+    # demo_target = target_event
+    # demo_source = source_event
 
-    # demo_users: list = sub_graphs[sub_graphs["root"] == "d09ad25df105efc54ea571eaf498a521"].user.tolist()
-    # demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
-    # demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
+    demo_users: list = sub_graphs[sub_graphs["root"] == "d09ad25df105efc54ea571eaf498a521"].user.tolist()
+    demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
+    demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
     demo_user_info: pd.DataFrame = user[user["user_id"].isin(demo_users)].reset_index(drop=True)
 
     user2id = {demo_users[i]: i for i in range(len(demo_users))}
@@ -49,15 +49,18 @@ if __name__ == '__main__':
     trainer.data_prepare(demo_source, demo_target, demo_user_info)
 
     pretrain_config = {"input": 3, "embedding": 128, "output": 64,
-                       "n_class": len(source2id)*2, "batch_size": 1024, "epoch": 1, "loss": multi_label_loss}
+                       "n_class": len(source2id)*2, "batch_size": 1024, "epoch": 5, "loss": multi_label_loss}
     trainer.pretrain(pretrain_config)
 
-    finetune_config = {"node_feat": 64, "epoch": 50, "loss": multi_label_loss}
+    finetune_config = {"node_feat": 64, "epoch": 5, "loss": multi_label_loss}
     trainer.finetune(finetune_config)
 
     evaluation_prediction = trainer.infer(trainer.evaluation_data)
-    mrr = mean_reciprocal_rank(evaluation_prediction)
-    print("MRR:", mrr)
+    candidate_voter_list = evaluation_prediction['candidate_voter_list'].tolist()
+    true_voter_list = evaluation_prediction['voter_list'].tolist()
+    mrr = mean_reciprocal_rank(candidate_voter_list, true_voter_list)
+    evaluation_prediction["mrr"] = mrr
+    print("MRR:", np.mean(mrr))
 
 
 
