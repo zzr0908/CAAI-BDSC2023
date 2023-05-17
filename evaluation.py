@@ -29,10 +29,10 @@ def edge_classification_evaluation(pred: np.array, target: np.array):
     pred = np.around(pred, 0).astype(int)
     mean_target = list(target.mean(axis=0))
     mean_pred = list(pred.mean(axis=0))
-    acc = [accuracy_score(pred[:, i], target[:, i]) for i in range(pred.shape[1])]
-    recall = [recall_score(pred[:, i], target[:, i]) for i in range(pred.shape[1])]
-    precision = [precision_score(pred[:, i], target[:, i]) for i in range(pred.shape[1])]
-    f1 = [f1_score(pred[:, i], target[:, i], ) for i in range(pred.shape[1])]
+    acc = [accuracy_score(target[:, i], pred[:, i]) for i in range(pred.shape[1])]
+    recall = [recall_score(target[:, i], pred[:, i]) for i in range(pred.shape[1])]
+    precision = [precision_score(target[:, i], pred[:, i]) for i in range(pred.shape[1])]
+    f1 = [f1_score(target[:, i], pred[:, i]) for i in range(pred.shape[1])]
 
     return {
             "mean_target": mean_target,

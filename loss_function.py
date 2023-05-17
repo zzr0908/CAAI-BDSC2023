@@ -20,7 +20,8 @@ def multi_label_loss(score, target):
     用于边分类预训练任务的损失函数
     input, target: (batch size, class num)
     """
-    loss = sigmoid_focal_loss(score, target, alpha=0.99, reduction="mean")
+    loss = sigmoid_focal_loss(score, target, alpha=0.95, reduction="sum")
+    # loss = F.binary_cross_entropy(score, target)
     return loss
 
 

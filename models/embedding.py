@@ -18,7 +18,6 @@ class NodeEmbedding(nn.Module):
 
     def forward(self, nodes: torch.Tensor):     # (batch, )
         output = self.embedding(nodes)     # (batch, out_feat)
-        output = F.relu(output)
         return output
 
 

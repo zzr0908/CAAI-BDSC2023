@@ -31,13 +31,8 @@ class EdgeClassifyHead(nn.Module):
             g.ndata["src_emd"] = self.src_linear(h)
             g.ndata["dst_emd"] = self.dst_linear(h)
             g.apply_edges(fn.u_add_v("src_emd", "dst_emd", "score"))
-            return F.sigmoid(g.edata["score"][:, :self.out])
-
-
-import torch.nn as nn
-import torch.nn.functional as F
-import dgl.function as fn
-import torch
+            h = g.edata["score"]
+        return h
 
 
 class FcLinkPredictor(nn.Module):

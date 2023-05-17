@@ -6,11 +6,11 @@ from models import *
 from samplers import *
 from utils import *
 import torch
-torch.cuda.manual_seed_all(2023)
+torch.cuda.manual_seed_all(1998)
 
 warnings.filterwarnings('ignore')
-pd.set_option('display.max_columns',None)
-pd.set_option('display.max_rows',100)
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
 
 
 if __name__ == '__main__':
@@ -27,15 +27,15 @@ if __name__ == '__main__':
     events, roots = root_event.event_id.tolist(), root_event.root_event.tolist()
     event_root_dic = {events[i]: roots[i] for i in range(len(events))}
 
-    demo_users = target_event["inviter_id"].unique().tolist() + target_event["voter_id"].unique().tolist()
-    demo_users = demo_users + source_event["inviter_id"].unique().tolist() + source_event["voter_id"].unique().tolist()
-    demo_users = list(set(demo_users))
-    demo_target = target_event
-    demo_source = source_event
+    # demo_users = target_event["inviter_id"].unique().tolist() + target_event["voter_id"].unique().tolist()
+    # demo_users = demo_users + source_event["inviter_id"].unique().tolist() + source_event["voter_id"].unique().tolist()
+    # demo_users = list(set(demo_users))
+    # demo_target = target_event
+    # demo_source = source_event
 
-    # demo_users: list = sub_graphs[sub_graphs["root"] == "d09ad25df105efc54ea571eaf498a521"].user.tolist()
-    # demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
-    # demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
+    demo_users: list = sub_graphs[sub_graphs["root"] == "a4d6f3b44edea6d489d72821d2ca3474"].user.tolist()
+    demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
+    demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
 
     demo_user_info: pd.DataFrame = user[user["user_id"].isin(demo_users)].reset_index(drop=True)
 
@@ -58,13 +58,14 @@ if __name__ == '__main__':
     demo_source["event_id"] = demo_source["event_id"].apply(lambda x: source2id[x])
 
     trainer = Trainer("Sage", "Sage", device='cuda:0')
-    trainer.data_prepare(demo_source, demo_target, demo_user_info, {"source_val_frac": 0.05})
+    trainer.data_prepare(demo_source, demo_target, demo_user_info, {"source_val_frac": 0.2, "rs": 1998})
 
     print(trainer.meta_data)
 
-    pretrain_config = {"input": 3, "embedding": 128, "output": 128,
-                       "n_class": len(source2id)*2, "batch_size": 1024, "epoch": 20,
-                       "loss": multi_label_loss, "sample_neighbor": [4, 4]}
+    model_config = {"embedding": 128, "hidden_feats": [256, 256]}
+    pretrain_config = {"model_config": model_config,
+                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 15,
+                       "loss": multi_label_loss, "sample_neighbor": [10, 25]}
     trainer.pretrain(pretrain_config)
     #
     # finetune_config = {"node_feat": 64, "epoch": 50, "loss": multi_label_loss}

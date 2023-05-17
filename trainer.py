@@ -1,12 +1,11 @@
 from data_loader import *
-from models.models import *
-from samplers import *
-from utils import *
+from models.ensemble import *
 from loss_function import *
 import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 import dgl
+from models.ensemble import *
 import random
 from tqdm import tqdm
 from evaluation import *
@@ -42,7 +41,7 @@ class Trainer:
         print("======Graph data preparing=======")
         source_val_frac = data_config.get("source_val_frac", 0.05)
         target_val_frac = data_config.get("target_val_frac", 0.05)
-        rs = data_config.get("rs", 2023)
+        rs = data_config.get("rs", 1234)
 
         data = GraphDataset(source, target, users, source_val_frac, target_val_frac, rs)
         data.process()
@@ -58,13 +57,22 @@ class Trainer:
         epoch = pretrain_config.get("epoch", 10)
         batch_size = pretrain_config.get("batch_size", 8)
         sample_neighbor = pretrain_config.get("sample_neighbor", [4, 4])
+        model_config = pretrain_config.get("model_config", {})
 
         # model init
-        if self.pretrain_model == "Sage":
-            inp, emb, out = pretrain_config["input"], pretrain_config["embedding"], pretrain_config["output"]
-            pretrain_model = SageModel(inp, emb, out).to(self.device)
-            n_class = pretrain_config["n_class"]
-            head = EdgeClassifyHead(out, n_class).to(self.device)
+        node_cnt = self.meta_data.get("num_nodes")
+        embedding = model_config.get("embedding", 64)
+        hidden_feats = model_config.get("hidden_feats", [64, 64])
+        out = self.meta_data.get("source_event_cnt") * 2
+        pretrain_model = GraphSageModel(node_cnt, embedding, hidden_feats, out)
+        pretrain_model.to(self.device)
+
+        print("init graph sage model with: \n",
+              f"number of nodes: {node_cnt} \n",
+              f"node embedding size: {embedding} \n",
+              f"size of hidden layers: {hidden_feats} \n",
+              f"classify number: {out} \n",
+              f"model device: {self.device} \n")
 
         # 将预训练抽样器用neighbor sampler, 参数传入
         sampler = dgl.dataloading.NeighborSampler(sample_neighbor)
@@ -90,7 +98,7 @@ class Trainer:
             val_eid,
             sampler,
             device=self.device,
-            batch_size=val_eid.shape[0],  # Batch size
+            batch_size=batch_size,  # Batch size
             shuffle=False,  # Whether to shuffle the nodes for every epoch.to(self.device)
             drop_last=False,
         )
@@ -99,70 +107,73 @@ class Trainer:
         print("\n start pretraining \n")
         # writer = SummaryWriter("D:/zhan/CAAI-BDSC2023/logs")
 
-        opt = torch.optim.Adam(list(pretrain_model.parameters()) + list(head.parameters()), weight_decay=0.05)
-        for i in range(epoch):
-            epoch_loss = 0
-            for step, (input_nodes, subgraph, mfgs) in enumerate(train_loader):
-                inputs = mfgs[0].srcdata["user_info"]
-                predictions = pretrain_model(mfgs, inputs)
-                score = head(subgraph, predictions)
-                edge_label = subgraph.edata["source_events"]
-                loss = loss_func(score, edge_label)
-                with torch.no_grad():
-                    epoch_loss += loss
-                loss.backward()
-            train_step = step
-            # 每次对全图训练完进行梯度下降
-            opt.step()
-            opt.zero_grad()
+        val_step = len(val_eid) / batch_size
+        train_step = len(train_eid) / batch_size
 
+        opt = torch.optim.Adam(pretrain_model.parameters(), weight_decay=0.05, lr=0.005)
+        for i in range(epoch):
+
+            val_loss = 0
             for step, (input_nodes, subgraph, mfgs) in enumerate(val_loader):
                 with torch.no_grad():
-                    inputs = mfgs[0].srcdata["user_info"]
-                    predictions = pretrain_model(mfgs, inputs)
-                    score = head(subgraph, predictions)
+                    nodes = mfgs[0].srcdata["_ID"]
+                    predictions = pretrain_model(mfgs, nodes, subgraph)
                     edge_label = subgraph.edata["source_events"]
-                    evaluation = edge_classification_evaluation(score.to("cpu").numpy(), edge_label.to("cpu").numpy())
-                    val_loss = loss_func(score, edge_label)
+                    val_loss += loss_func(predictions, edge_label)
 
-            print(f"batch{i}/{epoch-1}  ------train loss:{epoch_loss/(train_step+1)}, val loss:{val_loss}")
-            evaluation = {key: np.mean(val) for key, val in evaluation.items()}
-            print(evaluation)
-            # writer.add_scalar('pretraining loss/batch', loss, i)
+            epoch_loss = 0
+            for step, (input_nodes, subgraph, mfgs) in enumerate(train_loader):
+                nodes = mfgs[0].srcdata["_ID"]
+                predictions = pretrain_model(mfgs, nodes, subgraph)
+                # print(predictions)
+                edge_label = subgraph.edata["source_events"]
+                loss = loss_func(predictions, edge_label)
+                with torch.no_grad():
+                    epoch_loss += loss
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+
+            print(f"batch{i}/{epoch-1}  ------train loss:{epoch_loss/train_step}, val loss:{val_loss/val_step}")
 
         print("\n pretrain classifier evaluation\n")
 
+        val_prediction = np.zeros((len(val_eid), out))
+        val_target = np.zeros((len(val_eid), out))
+
         for step, (input_nodes, subgraph, mfgs) in enumerate(val_loader):
             with torch.no_grad():
-                inputs = mfgs[0].srcdata["user_info"]
-                predictions = pretrain_model(mfgs, inputs)
-                score = head(subgraph, predictions).to("cpu").numpy()
+                nodes = mfgs[0].srcdata["_ID"]
+                predictions = pretrain_model(mfgs, nodes, subgraph).to("cpu").numpy()
                 target = subgraph.edata["source_events"].to("cpu").numpy()
-                evaluation = edge_classification_evaluation(score, target)
-        evaluation = {key: np.mean(val) for key, val in evaluation.items()}
+                val_prediction[step*batch_size: step * batch_size + predictions.shape[0], :] = predictions
+                val_target[step * batch_size: step * batch_size + predictions.shape[0], :] = target
+
+        evaluation = edge_classification_evaluation(val_prediction, val_target)
+        evaluation = {key: round(np.mean(val), 4) for key, val in evaluation.items()}
         print(evaluation)
 
-        # 获取节点的embedding
-        node_sampler = dgl.dataloading.NeighborSampler(sample_neighbor)
-        node_loader = dgl.dataloading.DataLoader(
-                        self.graph,
-                        torch.arange(self.graph.num_nodes()).to(self.device),
-                        node_sampler,
-                        device=self.device,
-                        batch_size=batch_size,
-                        shuffle=False,
-                        drop_last=False
-                    )
-
-        print("\n calculating node embedding \n")
-        node_embeddings = torch.zeros((self.graph.num_nodes(), out)).to(self.device)
-        with tqdm(node_loader) as tq:
-            for step, (input_nodes, output_nodes, mfgs) in enumerate(tq):
-                with torch.no_grad():
-                    inputs = mfgs[0].srcdata["user_info"]
-                    outputs = pretrain_model(mfgs, inputs)
-                    node_embeddings[output_nodes] = outputs
-        self.graph.ndata["embedding"] = node_embeddings
+        # # 获取节点的embedding
+        # node_sampler = dgl.dataloading.NeighborSampler(sample_neighbor)
+        # node_loader = dgl.dataloading.DataLoader(
+        #                 self.graph,
+        #                 torch.arange(self.graph.num_nodes()).to(self.device),
+        #                 node_sampler,
+        #                 device=self.device,
+        #                 batch_size=batch_size,
+        #                 shuffle=False,
+        #                 drop_last=False
+        #             )
+        #
+        # print("\n calculating node embedding \n")
+        # node_embeddings = torch.zeros((self.graph.num_nodes(), out)).to(self.device)
+        # with tqdm(node_loader) as tq:
+        #     for step, (input_nodes, output_nodes, mfgs) in enumerate(tq):
+        #         with torch.no_grad():
+        #             inputs = mfgs[0].srcdata["user_info"]
+        #             outputs = pretrain_model(mfgs, inputs)
+        #             node_embeddings[output_nodes] = outputs
+        # self.graph.ndata["embedding"] = node_embeddings
 
     def finetune(self, finetune_config):
 
@@ -226,7 +237,7 @@ class Trainer:
                 with torch.no_grad():
                     epoch_loss += loss
                 if opt == "Adam":
-                    opt = torch.optim.Adam(finetune_model.parameters(), weight_decay=0.05)
+                    opt = torch.optim.Adam(finetune_model.parameters(), weight_decay=0.05, lr=0.005)
                 else:
                     pass
                 opt.zero_grad()

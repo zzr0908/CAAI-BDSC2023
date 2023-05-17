@@ -17,24 +17,12 @@ class SAGEConv(nn.Module):
 
     def __init__(self, in_feat, out_feat):
         super(SAGEConv, self).__init__()
-        # A linear submodule for projecting the input and neighbor feature to the output.
         self.linear = nn.Linear(in_feat * 2, out_feat)
 
-    def forward(self, g, h):
-        """Forward computation
-
-        Parameters
-        ----------
-        g : Graph
-            The input MFG.
-        h : (Tensor, Tensor)
-            The feature of source nodes and destination nodes as a pair of Tensors.
-        """
+    def forward(self, g, h_src, h_dst):
         with g.local_scope():
-            h_src, h_dst = h
-            g.srcdata["h"] = h_src  # <---
-            g.dstdata["h"] = h_dst  # <---
-            # update_all is a message passing API.
+            g.srcdata["h"] = h_src
+            g.dstdata["h"] = h_dst
             g.update_all(fn.copy_u("h", "m"), fn.mean("m", "h_N"))
             h_N = g.dstdata["h_N"]
             h_total = torch.cat([h_dst, h_N], dim=1)  # <---
