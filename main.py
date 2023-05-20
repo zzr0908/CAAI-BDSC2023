@@ -33,7 +33,7 @@ if __name__ == '__main__':
     # demo_target = target_event
     # demo_source = source_event
 
-    demo_users: list = sub_graphs[sub_graphs["root"] == "a4d6f3b44edea6d489d72821d2ca3474"].user.tolist()
+    demo_users: list = sub_graphs[sub_graphs["root"] != "a4d6f3b44edea6d489d72821d2ca3474"].user.tolist()
     demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
     demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
 
@@ -58,18 +58,27 @@ if __name__ == '__main__':
     demo_source["event_id"] = demo_source["event_id"].apply(lambda x: source2id[x])
 
     trainer = Trainer("Sage", "Sage", device='cuda:0')
-    trainer.data_prepare(demo_source, demo_target, demo_user_info, {"source_val_frac": 0.2, "rs": 1998})
+    trainer.data_prepare(demo_source, demo_target, demo_user_info, {"source_val_frac": 0.1, "rs": 2023})
 
-    print(trainer.meta_data)
-
-    model_config = {"embedding": 128, "hidden_feats": [256, 256]}
+    model_config = {"embedding": 64, "hidden_feats": [64, 64]}
     pretrain_config = {"model_config": model_config,
-                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 15,
-                       "loss": multi_label_loss, "sample_neighbor": [10, 25]}
+                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 10,
+                       "loss": multi_label_loss, "sample_neighbor": [-1, -1]}
     trainer.pretrain(pretrain_config)
     #
-    # finetune_config = {"node_feat": 64, "epoch": 50, "loss": multi_label_loss}
-    # trainer.finetune(finetune_config)
+    finetune_config = {"epoch": 15, "loss": multi_label_loss, "batch_size": 1024}
+    val_df = trainer.finetune(finetune_config)
+
+    def apply_cal_mrr(line):
+        return cal_mrr(line.voter_id_list, line.prediction)
+
+
+    val_df["mrr"] = val_df.apply(lambda x: apply_cal_mrr(x), axis=1)
+
+    val_df.to_csv("result/main_subgroup_infer.csv", index=False)  # target域三元组
+
+    print(val_df.head())
+    print(val_df["mrr"].mean())
     #
     # evaluation_prediction = trainer.infer(trainer.evaluation_data)
     # mrr = mean_reciprocal_rank(evaluation_prediction)

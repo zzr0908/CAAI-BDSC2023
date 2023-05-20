@@ -9,7 +9,7 @@ from utils import *
 
 class GraphDataset(DGLDataset):
     graph: dgl.DGLGraph
-    _val_data: pd.DataFrame  # 储存验证集用户
+    _target_data: pd.DataFrame  # 储存验证集用户
     """
     init
     传入已经转化为id的source和target、user
@@ -67,9 +67,10 @@ class GraphDataset(DGLDataset):
         self.target_event["target_train_mask"] = np.random.binomial(1, 1-self.target_val_frac, self.target_event.shape[0])
         self.target_event["target_val_mask"] = self.target_event["target_train_mask"].apply(lambda x: np.abs(1-x))
 
-        # 保存验证集数据，索引为[inviter_id, event_id]
-        self._val_data = self.target_event[self.target_event["target_val_mask"] == 1].\
-            groupby(["inviter_id", "event_id"]).voter_id.apply(lambda x: x.tolist())
+        # 保存target数据
+        self._target_data = self.target_event.groupby(["inviter_id", "event_id", "target_val_mask"]).\
+            voter_id.apply(lambda x: x.tolist()).reset_index()
+        self._target_data.columns = ["inviter_id", "event_id", "is_val", "voter_id_list"]
 
         self.target_event = self.target_event.groupby(["inviter_id", "voter_id", "target_train_mask", "target_val_mask"]).\
             event_id.apply(lambda x: x.tolist()).reset_index()
@@ -85,7 +86,7 @@ class GraphDataset(DGLDataset):
 
         target_train_event = all_target_event["target_train_mask"].sum()
         target_val_event = all_target_event["target_train_mask"].count() - target_train_event
-        val_triple = self._val_data.shape[0]
+        val_triple = self.target_data.is_val.sum()
 
         # 保存信息
         events = pd.concat([all_source_event, all_target_event], axis=0)
@@ -118,8 +119,8 @@ class GraphDataset(DGLDataset):
         return self.graph
 
     @property
-    def val_data(self):
-        return self._val_data
+    def target_data(self):
+        return self._target_data
 
     @property
     def meta_data(self):

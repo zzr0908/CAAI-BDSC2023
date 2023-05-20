@@ -29,19 +29,14 @@ def show_graph_info(g):
     print(f"number of edges: {g.num_edges()}")
 
 
-def mean_reciprocal_rank(eva_prediction):
-
-    mrr = []
-    rank_score = [1, 1 / 2, 1 / 3, 1 / 4, 1 / 5]
-    candidate_voter_list = eva_prediction['candidate_voter_list'].tolist()
-    true_voter_list = eva_prediction['voter_list'].tolist()
-    for i in range(eva_prediction.shape[0]):
-        candidate_voter, true_voter = candidate_voter_list[i], true_voter_list[i]
-        is_right = [1 if k in true_voter else 0 for k in candidate_voter]
-        mrr.append(np.multiply(is_right, rank_score).mean())
-    return np.mean(mrr)
-
-
+def flatten_tensor_list(l):
+    """
+    用于展开dgl bfs search的结果
+    """
+    flatted = []
+    for item in l:
+        flatted += item.numpy().tolist()
+    return flatted
 
 
 

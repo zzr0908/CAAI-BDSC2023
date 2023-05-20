@@ -22,9 +22,9 @@ class GraphSageModel(nn.Module):
     def __init__(self, node_cnt, embedding, hidden, out):
         super(GraphSageModel, self).__init__()
         self.embedding_layer = NodeEmbedding(node_cnt, embedding)
-        hidden = [embedding] + hidden
-        self.conv_layers = nn.ModuleList([SAGEConv(hidden[i], hidden[i+1]) for i in range(len(hidden) - 1)])
-        self.out_layer = EdgeClassifyHead(hidden[-1], out)
+        self.hidden = [embedding] + hidden
+        self.conv_layers = nn.ModuleList([SAGEConv(self.hidden[i], self.hidden[i+1]) for i in range(len(self.hidden) - 1)])
+        self.out_layer = EdgeClassifyHead(self.hidden[-1], out)
 
     def forward(self, mfgs, nodes, subgraph):
         h = self.embedding_layer(nodes)    # (batch, mfgs[0].srcdata.num_nodes(), embedding)
@@ -35,6 +35,14 @@ class GraphSageModel(nn.Module):
             h = F.relu(h)
         h = self.out_layer(subgraph, h)
         return F.sigmoid(h)
+
+    def reset_out_layer(self, out):     # 用于重新初始化模型输出层
+        self.out_layer = EdgeClassifyHead(self.hidden[-1], out)
+        device = next(self.parameters()).device
+        self.out_layer.to(device)
+
+    def frozen_layer(self, layer_names):     # 冻结层，不反向传播
+        pass
 
 
 

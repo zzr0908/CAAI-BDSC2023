@@ -44,4 +44,12 @@ def edge_classification_evaluation(pred: np.array, target: np.array):
             }
 
 
+def cal_mrr(true, pred):
+    if len(pred) == 0:
+        return 0
+    for item in true:
+        for i in range(len(pred)):
+            if pred[i] == item:
+                return 1/(i + 1)
+    return 0
 
