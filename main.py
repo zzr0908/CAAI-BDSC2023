@@ -62,11 +62,11 @@ if __name__ == '__main__':
 
     model_config = {"embedding": 128, "hidden_feats": [128, 128]}
     pretrain_config = {"model_config": model_config,
-                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 0,
+                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 30,
                        "loss": multi_label_loss, "sample_neighbor": [-1, -1]}
     trainer.pretrain(pretrain_config)
     #
-    finetune_config = {"epoch": 0, "loss": multi_label_loss, "batch_size": 1024, "recall_neighbour_level": 2,
+    finetune_config = {"epoch": 5, "loss": multi_label_loss, "batch_size": 1024, "recall_neighbour_level": 2,
                        "min_recall": 10}
     val_df = trainer.finetune(finetune_config)
 
