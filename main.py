@@ -33,7 +33,7 @@ if __name__ == '__main__':
     # demo_target = target_event
     # demo_source = source_event
 
-    demo_users: list = sub_graphs[sub_graphs["root"] != "a4d6f3b44edea6d489d72821d2ca3474"].user.tolist()
+    demo_users: list = sub_graphs[sub_graphs["root"] == "a4d6f3b44edea6d489d72821d2ca3474"].user.tolist()
     demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
     demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
 
