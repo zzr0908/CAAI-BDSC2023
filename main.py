@@ -60,13 +60,13 @@ if __name__ == '__main__':
     trainer = Trainer("Sage", "Sage", device='cuda:0')
     trainer.data_prepare(demo_source, demo_target, demo_user_info, {"source_val_frac": 0.1, "rs": 2023})
 
-    model_config = {"embedding": 64, "hidden_feats": [64, 64]}
+    model_config = {"embedding": 256, "hidden_feats": [256, 258]}
     pretrain_config = {"model_config": model_config,
-                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 10,
+                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 75,
                        "loss": multi_label_loss, "sample_neighbor": [-1, -1]}
     trainer.pretrain(pretrain_config)
     #
-    finetune_config = {"epoch": 15, "loss": multi_label_loss, "batch_size": 1024}
+    finetune_config = {"epoch": 20, "loss": multi_label_loss, "batch_size": 1024}
     val_df = trainer.finetune(finetune_config)
 
     def apply_cal_mrr(line):
