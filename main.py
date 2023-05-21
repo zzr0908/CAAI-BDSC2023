@@ -82,11 +82,11 @@ def get_param():
 
     # pretrain_config
     parser.add_argument('--pretrain_embedding', default=64, type=int)
-    parser.add_argument('--pretrain_hidden_feats',  default=[64, 64], type=list)
+    parser.add_argument('--pretrain_hidden_feats',  default=[64, 64], type=str)
     parser.add_argument('--pretrain_batch_size', default=2048, type=int)
     parser.add_argument('--pretrain_epoch', default=10, type=int)
     parser.add_argument('--pretrain_loss', default=multi_label_loss)
-    parser.add_argument('--pretrain_sample_neighbor', default=[-1, -1],  type=list)
+    parser.add_argument('--pretrain_sample_neighbor', default=[-1, -1],  type=str)
 
     # finetune_config
     parser.add_argument('--finetune_epoch', default=15, type=int)
@@ -103,12 +103,12 @@ def get_param():
     rs = args.rs
     pretrain_embedding = args.pretrain_embedding
     pretrain_hidden_feats = args.pretrain_hidden_feats
-    pretrain_hidden_feats = [int(item) for item in pretrain_hidden_feats]
+    pretrain_hidden_feats = eval(pretrain_hidden_feats)
     pretrain_batch_size = args.pretrain_batch_size
     pretrain_epoch = args.pretrain_epoch
     pretrain_loss = args.pretrain_loss
     pretrain_sample_neighbor = args.pretrain_sample_neighbor
-    pretrain_sample_neighbor = [int(item) for item in pretrain_sample_neighbor]
+    pretrain_sample_neighbor = eval(pretrain_sample_neighbor)
     finetune_epoch = args.finetune_epoch
     finetune_loss = args.finetune_loss
     finetune_batch_size = args.finetune_batch_size
