@@ -58,7 +58,7 @@ if __name__ == '__main__':
     demo_source["event_id"] = demo_source["event_id"].apply(lambda x: source2id[x])
 
     trainer = Trainer("Sage", "Sage", device='cuda:0')
-    trainer.data_prepare(demo_source, demo_target, demo_user_info, {"source_val_frac": 0.1, "rs": 2023})
+    trainer.data_prepare(demo_source, demo_target, demo_user_info, {"source_val_frac": 0.3, "rs": 2023})
 
     model_config = {"embedding": 256, "hidden_feats": [128, 258]}
     pretrain_config = {"model_config": model_config,
