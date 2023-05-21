@@ -14,7 +14,7 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', 100)
 
 
-def main(model_config, data_config, pretrain_config, finetune_config):
+def run(model_config, data_config, pretrain_config, finetune_config):
     target_event = pd.read_json("data/target_event_preliminary_train_info.json")  # target域三元组
     source_event = pd.read_json("data/source_event_preliminary_train_info.json")  # source域三元组
     sub_graphs = pd.read_csv("data/subgroup.csv")  # 子群体
@@ -144,9 +144,13 @@ def apply_cal_mrr(line):
     return cal_mrr(line.voter_id_list, line.prediction)
 
 
-if __name__ == '__main__':
+def main():
     model_config, data_config, pretrain_config, finetune_config = get_param()
-    main(model_config, data_config, pretrain_config, finetune_config)
+    run(model_config, data_config, pretrain_config, finetune_config)
+
+
+if __name__ == '__main__':
+    main()
 
 
 
