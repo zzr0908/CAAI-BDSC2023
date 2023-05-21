@@ -66,8 +66,8 @@ if __name__ == '__main__':
                        "loss": multi_label_loss, "sample_neighbor": [-1, -1]}
     trainer.pretrain(pretrain_config)
     #
-    finetune_config = {"epoch": 5, "loss": multi_label_loss, "batch_size": 1024, "recall_neighbour_level": 2,
-                       "min_recall": 10}
+    finetune_config = {"epoch": 5, "loss": multi_label_loss, "batch_size": 1024, "recall_neighbour_level": 1,
+                       "min_recall": 5}
     val_df = trainer.finetune(finetune_config)
 
     def apply_cal_mrr(line):
