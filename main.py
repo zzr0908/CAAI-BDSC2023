@@ -63,14 +63,13 @@ def run(model_config, data_config, pretrain_config, finetune_config):
     trainer.data_prepare(demo_source, demo_target, demo_user_info, data_config)
     pretrain_config['n_class'] = len(source2id) * 2
     trainer.pretrain(pretrain_config)
-    trainer.finetune(finetune_config)
+    val_df = trainer.finetune(finetune_config)
     # val_df = trainer.infer()
     #
     # # evaluation
-    # val_df["mrr"] = val_df.apply(lambda x: apply_cal_mrr(x), axis=1)
-    # # val_df.to_csv("result/main_subgroup_infer.csv", index=False)  # target域三元组
-    # print(val_df.head())
-    # print(val_df["mrr"].mean())
+    val_df["mrr"] = val_df.apply(lambda x: apply_cal_mrr(x), axis=1)
+    val_df.to_csv("result/main_subgroup_infer.csv", index=False)  # target域三元组
+    print(val_df["mrr"].mean())
 
 
 def get_param():
@@ -104,10 +103,12 @@ def get_param():
     rs = args.rs
     pretrain_embedding = args.pretrain_embedding
     pretrain_hidden_feats = args.pretrain_hidden_feats
+    pretrain_hidden_feats = [int(item) for item in pretrain_hidden_feats]
     pretrain_batch_size = args.pretrain_batch_size
     pretrain_epoch = args.pretrain_epoch
     pretrain_loss = args.pretrain_loss
     pretrain_sample_neighbor = args.pretrain_sample_neighbor
+    pretrain_sample_neighbor = [int(item) for item in pretrain_sample_neighbor]
     finetune_epoch = args.finetune_epoch
     finetune_loss = args.finetune_loss
     finetune_batch_size = args.finetune_batch_size
