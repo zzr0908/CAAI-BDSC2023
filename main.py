@@ -28,15 +28,15 @@ def run(model_config, data_config, pretrain_config, finetune_config):
     events, roots = root_event.event_id.tolist(), root_event.root_event.tolist()
     event_root_dic = {events[i]: roots[i] for i in range(len(events))}
 
-    # demo_users = target_event["inviter_id"].unique().tolist() + target_event["voter_id"].unique().tolist()
-    # demo_users = demo_users + source_event["inviter_id"].unique().tolist() + source_event["voter_id"].unique().tolist()
-    # demo_users = list(set(demo_users))
-    # demo_target = target_event
-    # demo_source = source_event
+    demo_users = target_event["inviter_id"].unique().tolist() + target_event["voter_id"].unique().tolist()
+    demo_users = demo_users + source_event["inviter_id"].unique().tolist() + source_event["voter_id"].unique().tolist()
+    demo_users = list(set(demo_users))
+    demo_target = target_event
+    demo_source = source_event
 
-    demo_users: list = sub_graphs[sub_graphs["root"] != "a4d6f3b44edea6d489d72821d2ca3474"].user.tolist()
-    demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
-    demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
+    # demo_users: list = sub_graphs[sub_graphs["root"] != "a4d6f3b44edea6d489d72821d2ca3474"].user.tolist()
+    # demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
+    # demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
 
     demo_user_info: pd.DataFrame = user[user["user_id"].isin(demo_users)].reset_index(drop=True)
 
@@ -64,13 +64,13 @@ def run(model_config, data_config, pretrain_config, finetune_config):
     pretrain_config['n_class'] = len(source2id) * 2
     trainer.pretrain(pretrain_config)
     trainer.finetune(finetune_config)
-    val_df = trainer.infer()
-
-    # evaluation
-    val_df["mrr"] = val_df.apply(lambda x: apply_cal_mrr(x), axis=1)
-    # val_df.to_csv("result/main_subgroup_infer.csv", index=False)  # target域三元组
-    print(val_df.head())
-    print(val_df["mrr"].mean())
+    # val_df = trainer.infer()
+    #
+    # # evaluation
+    # val_df["mrr"] = val_df.apply(lambda x: apply_cal_mrr(x), axis=1)
+    # # val_df.to_csv("result/main_subgroup_infer.csv", index=False)  # target域三元组
+    # print(val_df.head())
+    # print(val_df["mrr"].mean())
 
 
 def get_param():
