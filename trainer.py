@@ -333,7 +333,7 @@ def recall(graph: dgl.DGLGraph, inviter: int, neighbour_level=3, min_recall=10, 
     candidates_list = dgl.bfs_nodes_generator(graph, inviter)   # [np.array()]的逐级邻居
     candidates = []
     for i in range(1, neighbour_level+1):
-        if i > len(candidates_list):
+        if i >= len(candidates_list):
             break
         temp = candidates_list[i].numpy().tolist()
         temp = [item for item in temp if item not in white_list]    # reject white list
