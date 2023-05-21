@@ -15,6 +15,7 @@ class Trainer:
     model: torch.nn.Module
     graph: dgl.DGLGraph
     _target_data: pd.DataFrame
+    val_eid: torch.tensor
     """
     训练阶段分为data prepare, pretrain, finetune三步
     data prepare阶段将数据完成数据预处理与构图工作
@@ -105,7 +106,6 @@ class Trainer:
 
         # training loop
         print("\n start pretraining \n")
-        # writer = SummaryWriter("D:/zhan/CAAI-BDSC2023/logs")
 
         val_step = len(val_eid) / batch_size
         train_step = len(train_eid) / batch_size
@@ -165,6 +165,8 @@ class Trainer:
         eid = torch.arange(self.graph.num_edges()).to(self.device)
         train_eid = eid[self.graph.edata["target_train_mask"]]  # 训练集
         val_eid = eid[self.graph.edata["target_val_mask"]]      # 验证集
+        self.val_eid = val_eid
+
 
         # init model
         finetune_model = self.model
@@ -203,7 +205,6 @@ class Trainer:
         train_step = len(train_eid) / batch_size
 
         print(val_step, train_step)
-        # writer = SummaryWriter("D:/zhan/CAAI-BDSC2023/logs")
         for i in range(epoch):
             val_loss = 0
             train_loss = 0
@@ -246,59 +247,92 @@ class Trainer:
                 opt.step()
 
             print(f"finetune batch{i+1}/{epoch} ------- train loss:{round(train_loss/train_step, 4)}, val loss:{round(val_loss/val_step, 4)} \n")
-            # writer.add_scalar('finetune train_loss/batch', train_loss, i)
-            # writer.add_scalar('finetune val_loss/batch', val_loss, i)
 
         print("\n finetune training finished \n")
 
-        target_df = self.target_data
-        val_df = target_df[target_df["is_val"] == 1]
-        train_df = target_df[target_df["is_val"] == 0].set_index(["inviter_id", "event_id"])
 
-        inviter_ids = val_df.inviter_id.tolist()
-        event_ids = val_df.event_id.tolist()
-        predictions = []
-        candidates = []
-        val_graph = self.graph.to("cpu")
-        val_graph.remove_edges(val_eid.to("cpu"))
-        for i in range(len(inviter_ids)):
-            white = train_df.voter_id_list.get((inviter_ids[i], event_ids[i]), [])
-            p, c = self.infer(inviter_ids[i], event_ids[i], val_graph, recall_level=2, white_list=white)
-            predictions.append(p)
-            candidates.append(c)
-
-        val_df["prediction"] = predictions
-        val_df["candidate_cnt"] = candidates
-        return val_df
-
-    def infer(self, inviter_id, event_id, g, recall_level=3, min_recall=5, max_recall=100, k=5, white_list=[]):
+    def infer(self, test_event, val_eid=[], recall_level=3, k=5):
         """
         对某个点a，召回其k层的点a_recall共n个，并移除白名单中的点
         最内层的图 a 与 A_recall的边
         以{a, A_recall 为起点，向外扩两层}
         采样N个点的2(暂定)层邻居生成子图，输入模型中，计算目标点与找回点的分数并计分
         """
-        candidates = recall(g, inviter_id, recall_level)
-        candidates = [item for item in candidates if item not in white_list]
+        inviter_ids = test_event.inviter_id.tolist()
+        event_ids = test_event.event_id.tolist()
+        predictions = []
+        candidates = []
 
-        if len(candidates) == 0:
-            return [], 0
-        # todo: 1.白名单处理  2.改为批量
-        u, v = [0] * len(candidates), [i for i in range(1, len(candidates)+1)]
-        sub_graph = dgl.graph((u, v)).to(self.device)
+        target_df = self.target_data
+        val_df = target_df[target_df["is_val"] == 1]
+        train_df = target_df[target_df["is_val"] == 0].set_index(["inviter_id", "event_id"])
+        val_graph = self.graph.to("cpu")
+        val_graph.remove_edges(val_eid.to("cpu"))
+        for i in range(len(inviter_ids)):
+            inviter_id, event_id = inviter_ids[i], event_ids[i]
+            white_list = train_df.voter_id_list.get((inviter_ids[i], event_ids[i]), [])
+            candidates = recall(g, inviter_id, recall_level)
+            candidates = [item for item in candidates if item not in white_list]
 
-        seed_nodes = [inviter_id] + candidates
-        sampler = dgl.dataloading.NeighborSampler([-1, -1])
-        input_nodes, output_nodes, mfgs = sampler.sample(g, seed_nodes)
+            if len(candidates) == 0:
+                return [], 0
+            # todo: 1.白名单处理  2.改为批量
+            u, v = [0] * len(candidates), [i for i in range(1, len(candidates)+1)]
+            sub_graph = dgl.graph((u, v)).to(self.device)
 
-        input_nodes = input_nodes.to(self.device)
-        mfgs = [sg.to(self.device) for sg in mfgs]
+            seed_nodes = [inviter_id] + candidates
+            sampler = dgl.dataloading.NeighborSampler([-1, -1])
+            input_nodes, output_nodes, mfgs = sampler.sample(val_graph, seed_nodes)
 
-        with torch.no_grad():
-            scores = self.model(mfgs, input_nodes, sub_graph)
-            scores = scores[:, event_id].to("cpu").numpy()
-        pred_idx = np.argsort(scores)[::-1]
-        return np.array(candidates)[pred_idx].tolist()[: k], len(candidates)
+            input_nodes = input_nodes.to(self.device)
+            mfgs = [sg.to(self.device) for sg in mfgs]
+
+            with torch.no_grad():
+                scores = self.model(mfgs, input_nodes, sub_graph)
+                scores = scores[:, event_id].to("cpu").numpy()
+            pred_idx = np.argsort(scores)[::-1]
+
+            prediction = np.array(candidates)[pred_idx].tolist()[: k]
+            candidate_cnt = len(candidates)
+            predictions.append(prediction)
+            candidates.append(candidate_cnt)
+        test_event['prediction'] = predictions
+        test_event['candidate_cnt'] = candidates
+        return test_event
+
+
+    #
+    # def infer(self, inviter_id, event_id, g, recall_level=3, min_recall=5, max_recall=100, k=5, white_list=[]):
+    #     """
+    #     对某个点a，召回其k层的点a_recall共n个，并移除白名单中的点
+    #     最内层的图 a 与 A_recall的边
+    #     以{a, A_recall 为起点，向外扩两层}
+    #     采样N个点的2(暂定)层邻居生成子图，输入模型中，计算目标点与找回点的分数并计分
+    #     """
+    #     candidates = recall(g, inviter_id, recall_level)
+    #     candidates = [item for item in candidates if item not in white_list]
+    #
+    #     if len(candidates) == 0:
+    #         return [], 0
+    #     # todo: 1.白名单处理  2.改为批量
+    #     u, v = [0] * len(candidates), [i for i in range(1, len(candidates)+1)]
+    #     sub_graph = dgl.graph((u, v)).to(self.device)
+    #
+    #     seed_nodes = [inviter_id] + candidates
+    #     sampler = dgl.dataloading.NeighborSampler([-1, -1])
+    #     input_nodes, output_nodes, mfgs = sampler.sample(g, seed_nodes)
+    #
+    #     input_nodes = input_nodes.to(self.device)
+    #     mfgs = [sg.to(self.device) for sg in mfgs]
+    #
+    #     with torch.no_grad():
+    #         scores = self.model(mfgs, input_nodes, sub_graph)
+    #         scores = scores[:, event_id].to("cpu").numpy()
+    #     pred_idx = np.argsort(scores)[::-1]
+    #
+    #
+    #
+    #     return np.array(candidates)[pred_idx].tolist()[: k], len(candidates)
 
     @property
     def meta_data(self):

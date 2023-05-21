@@ -7,20 +7,21 @@ from samplers import *
 from utils import *
 import torch
 torch.cuda.manual_seed_all(1998)
+import argparse
 
 warnings.filterwarnings('ignore')
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', 100)
 
 
-if __name__ == '__main__':
-    target_event = pd.read_json("data/target_event_preliminary_train_info.json")    # target域三元组
-    source_event = pd.read_json("data/source_event_preliminary_train_info.json")    # source域三元组
-    sub_graphs = pd.read_csv("data/subgroup.csv")   # 子群体
-    user = pd.read_json("data/user_info.json")      # 用户信息
+def main(model_config, data_config, pretrain_config, finetune_config):
+    target_event = pd.read_json("data/target_event_preliminary_train_info.json")  # target域三元组
+    source_event = pd.read_json("data/source_event_preliminary_train_info.json")  # source域三元组
+    sub_graphs = pd.read_csv("data/subgroup.csv")  # 子群体
+    user = pd.read_json("data/user_info.json")  # 用户信息
     root_event = pd.read_csv("data/root_event.csv")
 
-    user["gender_id"] = user["gender_id"] + 1     # 处理特征，特征中存在-1(未知，转换为0以上得整数类别）
+    user["gender_id"] = user["gender_id"] + 1  # 处理特征，特征中存在-1(未知，转换为0以上得整数类别）
     user["age_level"] = user["age_level"] + 1
     user["user_level"] = user["user_level"] + 1
 
@@ -57,32 +58,95 @@ if __name__ == '__main__':
     demo_target["event_id"] = demo_target["event_id"].apply(lambda x: target2id[x])
     demo_source["event_id"] = demo_source["event_id"].apply(lambda x: source2id[x])
 
-    trainer = Trainer("Sage", "Sage", device='cuda:0')
-    trainer.data_prepare(demo_source, demo_target, demo_user_info, {"source_val_frac": 0.1, "rs": 2023})
-
-    model_config = {"embedding": 64, "hidden_feats": [64, 64]}
-    pretrain_config = {"model_config": model_config,
-                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 10,
-                       "loss": multi_label_loss, "sample_neighbor": [-1, -1]}
+    # train
+    trainer = Trainer(model_config['pretrain_model'], model_config['finetune_model'], device=model_config['device'])
+    trainer.data_prepare(demo_source, demo_target, demo_user_info, data_config)
+    pretrain_config['n_class'] = len(source2id) * 2
     trainer.pretrain(pretrain_config)
-    #
-    finetune_config = {"epoch": 15, "loss": multi_label_loss, "batch_size": 1024}
-    val_df = trainer.finetune(finetune_config)
+    trainer.finetune(finetune_config)
+    val_df = trainer.infer()
 
-    def apply_cal_mrr(line):
-        return cal_mrr(line.voter_id_list, line.prediction)
-
-
+    # evaluation
     val_df["mrr"] = val_df.apply(lambda x: apply_cal_mrr(x), axis=1)
-
-    val_df.to_csv("result/main_subgroup_infer.csv", index=False)  # target域三元组
-
+    # val_df.to_csv("result/main_subgroup_infer.csv", index=False)  # target域三元组
     print(val_df.head())
     print(val_df["mrr"].mean())
-    #
-    # evaluation_prediction = trainer.infer(trainer.evaluation_data)
-    # mrr = mean_reciprocal_rank(evaluation_prediction)
-    # print("MRR:", mrr)
+
+
+def get_param():
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('--pretrain_model', default='Sage')
+    parser.add_argument('--finetune_model', default='Sage')
+    parser.add_argument('--device', default='cpu')
+    parser.add_argument('--source_val_frac', default=0.1)
+    parser.add_argument('--rs', default=2023)
+
+    # pretrain_config
+    parser.add_argument('--pretrain_embedding', default=64)
+    parser.add_argument('--pretrain_hidden_feats',  default=[64, 64])
+    parser.add_argument('--pretrain_batch_size', default=2048)
+    parser.add_argument('--pretrain_epoch', default=10)
+    parser.add_argument('--pretrain_loss', default=multi_label_loss)
+    parser.add_argument('--pretrain_sample_neighbor', default=[-1, -1])
+
+    # finetune_config
+    parser.add_argument('--finetune_epoch', default=15)
+    parser.add_argument('--finetune_loss', default=multi_label_loss)
+    parser.add_argument('--finetune_batch_size', default=1024)
+
+    args = parser.parse_args()
+    pretrain_model = args.pretrain_model
+    finetune_model = args.finetune_model
+    device = args.device
+    source_val_frac = args.source_val_frac
+    rs = args.rs
+    pretrain_embedding = args.pretrain_embedding
+    pretrain_hidden_feats = args.pretrain_hidden_feats
+    pretrain_batch_size = args.pretrain_batch_size
+    pretrain_epoch = args.pretrain_epoch
+    pretrain_loss = args.pretrain_loss
+    pretrain_sample_neighbor = args.pretrain_sample_neighbor
+    finetune_epoch = args.finetune_epoch
+    finetune_loss = args.finetune_loss
+    finetune_batch_size = args.finetune_batch_size
+
+    model_param = {
+        'pretrain_model': pretrain_model,
+        'finetune_model': finetune_model,
+        'device': device
+    }
+    data_param = {
+        'source_val_frac': source_val_frac,
+        'rs': rs
+    }
+
+    pretrain_model_param = {
+        'embedding': pretrain_embedding,
+        'hidden_feats': pretrain_hidden_feats,
+    }
+    pretrain_param = {
+        "model_config": pretrain_model_param,
+        'batch_size': pretrain_batch_size,
+        'epoch': pretrain_epoch,
+        'loss': pretrain_loss,
+        'sample_neighbor': pretrain_sample_neighbor
+    }
+
+    finetune_param = {
+        'epoch': finetune_epoch,
+        'loss': finetune_loss,
+        'batch_size': finetune_batch_size
+    }
+    return model_param, data_param, pretrain_param, finetune_param
+
+
+def apply_cal_mrr(line):
+    return cal_mrr(line.voter_id_list, line.prediction)
+
+
+if __name__ == '__main__':
+    model_config, data_config, pretrain_config, finetune_config = get_param()
+    main(model_config, data_config, pretrain_config, finetune_config)
 
 
 
