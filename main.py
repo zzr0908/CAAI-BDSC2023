@@ -82,11 +82,11 @@ def get_param():
 
     # pretrain_config
     parser.add_argument('--pretrain_embedding', default=64, type=int)
-    parser.add_argument('--pretrain_hidden_feats',  default=[64, 64], type=str)
+    parser.add_argument('--pretrain_hidden_feats',  default="[64, 64]", type=str)
     parser.add_argument('--pretrain_batch_size', default=2048, type=int)
     parser.add_argument('--pretrain_epoch', default=10, type=int)
     parser.add_argument('--pretrain_loss', default=multi_label_loss)
-    parser.add_argument('--pretrain_sample_neighbor', default=[-1, -1],  type=str)
+    parser.add_argument('--pretrain_sample_neighbor', default="[-1, -1]",  type=str)
 
     # finetune_config
     parser.add_argument('--finetune_epoch', default=15, type=int)
