@@ -75,26 +75,26 @@ def run(model_config, data_config, pretrain_config, finetune_config):
 
 def get_param():
     parser = argparse.ArgumentParser(description='')
-    parser.add_argument('--pretrain_model', default='Sage')
-    parser.add_argument('--finetune_model', default='Sage')
-    parser.add_argument('--device', default='cpu')
-    parser.add_argument('--source_val_frac', default=0.1)
-    parser.add_argument('--rs', default=2023)
+    parser.add_argument('--pretrain_model', default='Sage', type=str)
+    parser.add_argument('--finetune_model', default='Sage', type=str)
+    parser.add_argument('--device', default='cpu', type=str)
+    parser.add_argument('--source_val_frac', default=0.1, type=float)
+    parser.add_argument('--rs', default=2023, type=int)
 
     # pretrain_config
-    parser.add_argument('--pretrain_embedding', default=64)
-    parser.add_argument('--pretrain_hidden_feats',  default=[64, 64])
-    parser.add_argument('--pretrain_batch_size', default=2048)
-    parser.add_argument('--pretrain_epoch', default=10)
+    parser.add_argument('--pretrain_embedding', default=64, type=int)
+    parser.add_argument('--pretrain_hidden_feats',  default=[64, 64], type=list)
+    parser.add_argument('--pretrain_batch_size', default=2048, type=int)
+    parser.add_argument('--pretrain_epoch', default=10, type=int)
     parser.add_argument('--pretrain_loss', default=multi_label_loss)
-    parser.add_argument('--pretrain_sample_neighbor', default=[-1, -1])
+    parser.add_argument('--pretrain_sample_neighbor', default=[-1, -1],  type=list)
 
     # finetune_config
-    parser.add_argument('--finetune_epoch', default=15)
+    parser.add_argument('--finetune_epoch', default=15, type=int)
     parser.add_argument('--finetune_loss', default=multi_label_loss)
-    parser.add_argument('--finetune_batch_size', default=1024)
-    parser.add_argument('--recall_level', default=2)
-    parser.add_argument('--min_recall', default=10)
+    parser.add_argument('--finetune_batch_size', default=1024, type=int)
+    parser.add_argument('--recall_level', default=2, type=int)
+    parser.add_argument('--min_recall', default=10, type=int)
 
     args = parser.parse_args()
     pretrain_model = args.pretrain_model
