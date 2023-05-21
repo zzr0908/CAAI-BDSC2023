@@ -60,9 +60,9 @@ if __name__ == '__main__':
     trainer = Trainer("Sage", "Sage", device='cuda:0')
     trainer.data_prepare(demo_source, demo_target, demo_user_info, {"source_val_frac": 0.3, "rs": 2023})
 
-    model_config = {"embedding": 256, "hidden_feats": [128, 258]}
+    model_config = {"embedding": 128, "hidden_feats": [128, 128]}
     pretrain_config = {"model_config": model_config,
-                       "n_class": len(source2id)*2, "batch_size": 128, "epoch": 30,
+                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 30,
                        "loss": multi_label_loss, "sample_neighbor": [-1, -1]}
     trainer.pretrain(pretrain_config)
     #
