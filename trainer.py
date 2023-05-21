@@ -291,7 +291,7 @@ class Trainer:
         candidates = recall(g, inviter_id, recall_level, min_recall, white_list)
 
         if len(candidates) == 0:
-            return [], 0
+            return [], []
         # todo: 1.白名单处理  2.改为批量
         u, v = [0] * len(candidates), [i for i in range(1, len(candidates)+1)]
         sub_graph = dgl.graph((u, v)).to(self.device)
