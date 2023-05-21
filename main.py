@@ -62,11 +62,11 @@ if __name__ == '__main__':
 
     model_config = {"embedding": 128, "hidden_feats": [128, 128]}
     pretrain_config = {"model_config": model_config,
-                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 30,
+                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 0,
                        "loss": multi_label_loss, "sample_neighbor": [-1, -1]}
     trainer.pretrain(pretrain_config)
     #
-    finetune_config = {"epoch": 20, "loss": multi_label_loss, "batch_size": 1024}
+    finetune_config = {"epoch": 0, "loss": multi_label_loss, "batch_size": 1024}
     val_df = trainer.finetune(finetune_config)
 
     def apply_cal_mrr(line):
@@ -77,7 +77,6 @@ if __name__ == '__main__':
 
     val_df.to_csv("result/main_subgroup_infer.csv", index=False)  # target域三元组
 
-    print(val_df.head())
     print(val_df["mrr"].mean())
     #
     # evaluation_prediction = trainer.infer(trainer.evaluation_data)
