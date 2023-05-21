@@ -161,6 +161,15 @@ class Trainer:
         batch_size = finetune_config.get("batch_size", 64)
         epoch = finetune_config.get("epoch", 20)
         loss_func = finetune_config.get("loss", multi_label_loss)
+        recall_neighbour_level = finetune_config.get("recall_neighbour_level", 2)
+        min_recall = finetune_config.get("min_recall", 10)
+
+        print("\n finetuning with: \n",
+              f"negative samples ratio: {neg_cnt} \n",
+              f"batch_size: {batch_size} \n",
+              f"epoch: {epoch} \n",
+              f"recall neighbour level: {recall_neighbour_level} \n",
+              f"minial recall voter if exists: {min_recall} \n")
 
         eid = torch.arange(self.graph.num_edges()).to(self.device)
         train_eid = eid[self.graph.edata["target_train_mask"]]  # 训练集
@@ -263,7 +272,8 @@ class Trainer:
         val_graph.remove_edges(val_eid.to("cpu"))
         for i in range(len(inviter_ids)):
             white = train_df.voter_id_list.get((inviter_ids[i], event_ids[i]), [])
-            p, c = self.infer(inviter_ids[i], event_ids[i], val_graph, recall_level=1, white_list=white)
+            p, c = self.infer(inviter_ids[i], event_ids[i], val_graph, recall_level=recall_neighbour_level
+                              , min_recall=min_recall,white_list=white)
             predictions.append(p)
             candidates.append(c)
 
@@ -271,15 +281,14 @@ class Trainer:
         val_df["candidate_cnt"] = candidates
         return val_df
 
-    def infer(self, inviter_id, event_id, g, recall_level=3, min_recall=5, max_recall=100, k=5, white_list=[]):
+    def infer(self, inviter_id, event_id, g, recall_level=3, min_recall=10, max_recall=100, k=5, white_list=[]):
         """
         对某个点a，召回其k层的点a_recall共n个，并移除白名单中的点
         最内层的图 a 与 A_recall的边
         以{a, A_recall 为起点，向外扩两层}
         采样N个点的2(暂定)层邻居生成子图，输入模型中，计算目标点与找回点的分数并计分
         """
-        candidates = recall(g, inviter_id, recall_level)
-        candidates = [item for item in candidates if item not in white_list]
+        candidates = recall(g, inviter_id, recall_level, min_recall, white_list)
 
         if len(candidates) == 0:
             return [], 0
@@ -298,7 +307,7 @@ class Trainer:
             scores = self.model(mfgs, input_nodes, sub_graph)
             scores = scores[:, event_id].to("cpu").numpy()
         pred_idx = np.argsort(scores)[::-1]
-        return np.array(candidates)[pred_idx].tolist()[: k], len(candidates)
+        return np.array(candidates)[pred_idx].tolist()[: k], candidates
 
     @property
     def meta_data(self):
@@ -316,14 +325,19 @@ def get_subgraph_vec(subgraph, mfgs, feat):
     return u, v
 
 
-def recall(graph: dgl.DGLGraph, inviter: int, k=3):
+def recall(graph: dgl.DGLGraph, inviter: int, neighbour_level=3, min_recall=10, white_list=[]):
     """
     从子图中召回
     注意graph默认在cpu上
     """
-    candidates = dgl.bfs_nodes_generator(graph, inviter)
-    candidates = candidates[1: k+1]
-    candidates = flatten_tensor_list(candidates)
+    candidates_list = dgl.bfs_nodes_generator(graph, inviter)   # [np.array()]的逐级邻居
+    candidates = []
+    for i in range(1, neighbour_level+1):
+        temp = candidates_list[i].numpy().tolist()
+        temp = [item for item in temp if item not in white_list]    # reject white list
+        candidates += temp
+        if len(candidates) > min_recall:
+            break
     return candidates
 
 
