@@ -27,15 +27,15 @@ if __name__ == '__main__':
     events, roots = root_event.event_id.tolist(), root_event.root_event.tolist()
     event_root_dic = {events[i]: roots[i] for i in range(len(events))}
 
-    # demo_users = target_event["inviter_id"].unique().tolist() + target_event["voter_id"].unique().tolist()
-    # demo_users = demo_users + source_event["inviter_id"].unique().tolist() + source_event["voter_id"].unique().tolist()
-    # demo_users = list(set(demo_users))
-    # demo_target = target_event
-    # demo_source = source_event
+    demo_users = target_event["inviter_id"].unique().tolist() + target_event["voter_id"].unique().tolist()
+    demo_users = demo_users + source_event["inviter_id"].unique().tolist() + source_event["voter_id"].unique().tolist()
+    demo_users = list(set(demo_users))
+    demo_target = target_event
+    demo_source = source_event
 
-    demo_users: list = sub_graphs[sub_graphs["root"] == "a4d6f3b44edea6d489d72821d2ca3474"].user.tolist()
-    demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
-    demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
+    # demo_users: list = sub_graphs[sub_graphs["root"] == "a4d6f3b44edea6d489d72821d2ca3474"].user.tolist()
+    # demo_target: pd.DataFrame = target_event[target_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
+    # demo_source: pd.DataFrame = source_event[source_event["inviter_id"].isin(demo_users)].reset_index(drop=True)
 
     demo_user_info: pd.DataFrame = user[user["user_id"].isin(demo_users)].reset_index(drop=True)
 
@@ -60,9 +60,9 @@ if __name__ == '__main__':
     trainer = Trainer("Sage", "Sage", device='cuda:0')
     trainer.data_prepare(demo_source, demo_target, demo_user_info, {"source_val_frac": 0.1, "rs": 2023})
 
-    model_config = {"embedding": 256, "hidden_feats": [256, 258]}
+    model_config = {"embedding": 256, "hidden_feats": [128, 258]}
     pretrain_config = {"model_config": model_config,
-                       "n_class": len(source2id)*2, "batch_size": 2048, "epoch": 75,
+                       "n_class": len(source2id)*2, "batch_size": 128, "epoch": 30,
                        "loss": multi_label_loss, "sample_neighbor": [-1, -1]}
     trainer.pretrain(pretrain_config)
     #

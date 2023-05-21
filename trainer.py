@@ -263,7 +263,7 @@ class Trainer:
         val_graph.remove_edges(val_eid.to("cpu"))
         for i in range(len(inviter_ids)):
             white = train_df.voter_id_list.get((inviter_ids[i], event_ids[i]), [])
-            p, c = self.infer(inviter_ids[i], event_ids[i], val_graph, recall_level=2, white_list=white)
+            p, c = self.infer(inviter_ids[i], event_ids[i], val_graph, recall_level=1, white_list=white)
             predictions.append(p)
             candidates.append(c)
 
